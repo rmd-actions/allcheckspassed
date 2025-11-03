@@ -3727,7 +3727,7 @@ module.exports = __toCommonJS(dist_src_exports);
 var import_universal_user_agent = __nccwpck_require__(3843);
 
 // pkg/dist-src/version.js
-var VERSION = "9.0.4";
+var VERSION = "9.0.6";
 
 // pkg/dist-src/defaults.js
 var userAgent = `octokit-endpoint.js/${VERSION} ${(0, import_universal_user_agent.getUserAgent)()}`;
@@ -3832,9 +3832,9 @@ function addQueryParameters(url, parameters) {
 }
 
 // pkg/dist-src/util/extract-url-variable-names.js
-var urlVariableRegex = /\{[^}]+\}/g;
+var urlVariableRegex = /\{[^{}}]+\}/g;
 function removeNonChars(variableName) {
-  return variableName.replace(/^\W+|\W+$/g, "").split(/,/);
+  return variableName.replace(/(?:^\W+)|(?:(?<!\W)\W+$)/g, "").split(/,/);
 }
 function extractUrlVariableNames(url) {
   const matches = url.match(urlVariableRegex);
@@ -4020,7 +4020,7 @@ function parse(options) {
     }
     if (url.endsWith("/graphql")) {
       if (options.mediaType.previews?.length) {
-        const previewsFromAcceptHeader = headers.accept.match(/[\w-]+(?=-preview)/g) || [];
+        const previewsFromAcceptHeader = headers.accept.match(/(?<![\w-])[\w-]+(?=-preview)/g) || [];
         headers.accept = previewsFromAcceptHeader.concat(options.mediaType.previews).map((preview) => {
           const format = options.mediaType.format ? `.${options.mediaType.format}` : "+json";
           return `application/vnd.github.${preview}-preview${format}`;
@@ -6936,7 +6936,7 @@ var import_endpoint = __nccwpck_require__(4471);
 var import_universal_user_agent = __nccwpck_require__(3843);
 
 // pkg/dist-src/version.js
-var VERSION = "8.1.6";
+var VERSION = "8.4.1";
 
 // pkg/dist-src/is-plain-object.js
 function isPlainObject(value) {
@@ -6961,7 +6961,7 @@ function getBufferResponse(response) {
 
 // pkg/dist-src/fetch-wrapper.js
 function fetchWrapper(requestOptions) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d;
   const log = requestOptions.request && requestOptions.request.log ? requestOptions.request.log : console;
   const parseSuccessResponseBody = ((_a = requestOptions.request) == null ? void 0 : _a.parseSuccessResponseBody) !== false;
   if (isPlainObject(requestOptions.body) || Array.isArray(requestOptions.body)) {
@@ -6982,8 +6982,9 @@ function fetchWrapper(requestOptions) {
   return fetch(requestOptions.url, {
     method: requestOptions.method,
     body: requestOptions.body,
+    redirect: (_c = requestOptions.request) == null ? void 0 : _c.redirect,
     headers: requestOptions.headers,
-    signal: (_c = requestOptions.request) == null ? void 0 : _c.signal,
+    signal: (_d = requestOptions.request) == null ? void 0 : _d.signal,
     // duplex must be set if request.body is ReadableStream or Async Iterables.
     // See https://fetch.spec.whatwg.org/#dom-requestinit-duplex.
     ...requestOptions.body && { duplex: "half" }
@@ -6994,7 +6995,7 @@ function fetchWrapper(requestOptions) {
       headers[keyAndValue[0]] = keyAndValue[1];
     }
     if ("deprecation" in headers) {
-      const matches = headers.link && headers.link.match(/<([^>]+)>; rel="deprecation"/);
+      const matches = headers.link && headers.link.match(/<([^<>]+)>; rel="deprecation"/);
       const deprecationLink = matches && matches.pop();
       log.warn(
         `[@octokit/request] "${requestOptions.method} ${requestOptions.url}" is deprecated. It is scheduled to be removed on ${headers.sunset}${deprecationLink ? `. See ${deprecationLink}` : ""}`
@@ -7080,11 +7081,17 @@ async function getResponseData(response) {
 function toErrorMessage(data) {
   if (typeof data === "string")
     return data;
+  let suffix;
+  if ("documentation_url" in data) {
+    suffix = ` - ${data.documentation_url}`;
+  } else {
+    suffix = "";
+  }
   if ("message" in data) {
     if (Array.isArray(data.errors)) {
-      return `${data.message}: ${data.errors.map(JSON.stringify).join(", ")}`;
+      return `${data.message}: ${data.errors.map(JSON.stringify).join(", ")}${suffix}`;
     }
-    return data.message;
+    return `${data.message}${suffix}`;
   }
   return `Unknown error: ${JSON.stringify(data)}`;
 }
@@ -15567,7 +15574,7 @@ module.exports = {
 
 
 const { parseSetCookie } = __nccwpck_require__(8915)
-const { stringify, getHeadersList } = __nccwpck_require__(3834)
+const { stringify } = __nccwpck_require__(3834)
 const { webidl } = __nccwpck_require__(4222)
 const { Headers } = __nccwpck_require__(6349)
 
@@ -15643,14 +15650,13 @@ function getSetCookies (headers) {
 
   webidl.brandCheck(headers, Headers, { strict: false })
 
-  const cookies = getHeadersList(headers).cookies
+  const cookies = headers.getSetCookie()
 
   if (!cookies) {
     return []
   }
 
-  // In older versions of undici, cookies is a list of name:value.
-  return cookies.map((pair) => parseSetCookie(Array.isArray(pair) ? pair[1] : pair))
+  return cookies.map((pair) => parseSetCookie(pair))
 }
 
 /**
@@ -16078,14 +16084,15 @@ module.exports = {
 /***/ }),
 
 /***/ 3834:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+/***/ ((module) => {
 
 "use strict";
 
 
-const assert = __nccwpck_require__(2613)
-const { kHeadersList } = __nccwpck_require__(6443)
-
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
 function isCTLExcludingHtab (value) {
   if (value.length === 0) {
     return false
@@ -16346,31 +16353,13 @@ function stringify (cookie) {
   return out.join('; ')
 }
 
-let kHeadersListNode
-
-function getHeadersList (headers) {
-  if (headers[kHeadersList]) {
-    return headers[kHeadersList]
-  }
-
-  if (!kHeadersListNode) {
-    kHeadersListNode = Object.getOwnPropertySymbols(headers).find(
-      (symbol) => symbol.description === 'headers list'
-    )
-
-    assert(kHeadersListNode, 'Headers cannot be parsed')
-  }
-
-  const headersList = headers[kHeadersListNode]
-  assert(headersList)
-
-  return headersList
-}
-
 module.exports = {
   isCTLExcludingHtab,
-  stringify,
-  getHeadersList
+  validateCookieName,
+  validateCookiePath,
+  validateCookieValue,
+  toIMFDate,
+  stringify
 }
 
 
@@ -20374,6 +20363,7 @@ const {
   isValidHeaderName,
   isValidHeaderValue
 } = __nccwpck_require__(5523)
+const util = __nccwpck_require__(9023)
 const { webidl } = __nccwpck_require__(4222)
 const assert = __nccwpck_require__(2613)
 
@@ -20927,6 +20917,9 @@ Object.defineProperties(Headers.prototype, {
   [Symbol.toStringTag]: {
     value: 'Headers',
     configurable: true
+  },
+  [util.inspect.custom]: {
+    enumerable: false
   }
 })
 
@@ -30103,6 +30096,20 @@ class Pool extends PoolBase {
       ? { ...options.interceptors }
       : undefined
     this[kFactory] = factory
+
+    this.on('connectionError', (origin, targets, error) => {
+      // If a connection error occurs, we remove the client from the pool,
+      // and emit a connectionError event. They will not be re-used.
+      // Fixes https://github.com/nodejs/undici/issues/3895
+      for (const target of targets) {
+        // Do not use kRemoveClient here, as it will close the client,
+        // but the client cannot be closed in this state.
+        const idx = this[kClients].indexOf(target)
+        if (idx !== -1) {
+          this[kClients].splice(idx, 1)
+        }
+      }
+    })
   }
 
   [kGetDispatcher] () {
@@ -32540,7 +32547,7 @@ const core = __importStar(__nccwpck_require__(7484));
 const checksAPI_1 = __nccwpck_require__(3638);
 const checksFilters_1 = __nccwpck_require__(6421);
 const timeFuncs_1 = __nccwpck_require__(8353);
-const fileExtractor_1 = __nccwpck_require__(9603);
+const checkNameExtractor_1 = __nccwpck_require__(6092);
 const checksConstants_1 = __nccwpck_require__(1763);
 const checkEmoji_1 = __nccwpck_require__(5331);
 class Checks {
@@ -32593,7 +32600,7 @@ class Checks {
     async filterChecks() {
         // let's get the check from the workflow run itself, if the value already exists, don't re-fetch it
         if (!this.ownCheck) {
-            let ownCheckName = await (0, fileExtractor_1.extractOwnCheckNameFromWorkflow)();
+            let ownCheckName = await (0, checkNameExtractor_1.extractOwnCheckNameFromWorkflow)();
             this.ownCheck = this.allChecks.find((check) => check.name === ownCheckName && check.app.slug === checksConstants_1.GitHubActionsBotSlug);
             if (!this.ownCheck) {
                 core.warning(`Could not determine own allcheckspassed check (expected name: ${JSON.stringify(ownCheckName)}, this may cause an indefinite loop)`);
@@ -33105,7 +33112,7 @@ async function run() {
 
 /***/ }),
 
-/***/ 9603:
+/***/ 6092:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -33169,21 +33176,47 @@ async function getFile(owner, repo, path, ref) {
             owner,
             repo,
             path,
-            ref
+            ref,
         });
         // parse the yaml file to json
-        let fileContent = Buffer.from(file.data.content, 'base64').toString();
+        let fileContent = Buffer.from(file.data.content, "base64").toString();
         return yaml_1.default.parse(fileContent);
     }
     catch (error) {
         throw new Error("Error getting file: " + error.message);
     }
 }
-async function extractOwnCheckNameFromWorkflow(owner = github.context.repo.owner, repo = github.context.repo.repo, path = extractFilePath(), ref = inputsExtractor_1.sanitizedInputs.commitSHA) {
-    let jobName = process.env.GITHUB_JOB;
+async function getCheckNameFromCheckRunId(owner, repo, checkRunId) {
     try {
-        let workflow = await getFile(owner, repo, path, ref);
-        let checkName = workflow.jobs[jobName].name || jobName;
+        let checkRun = await octokit_1.restClient.checks.get({
+            owner,
+            repo,
+            check_run_id: checkRunId,
+        });
+        return checkRun.data.name;
+    }
+    catch (error) {
+        throw new Error("Error getting check run: " + error.message);
+    }
+}
+async function extractOwnCheckNameFromWorkflow() {
+    const owner = github.context.repo.owner;
+    const repo = github.context.repo.repo;
+    const path = extractFilePath();
+    const ref = inputsExtractor_1.sanitizedInputs.commitSHA;
+    const jobName = process.env.GITHUB_JOB;
+    const checkRunId = inputsExtractor_1.sanitizedInputs.checkRunId;
+    try {
+        let checkName;
+        if (checkRunId) {
+            checkName = await getCheckNameFromCheckRunId(owner, repo, checkRunId);
+            core.debug(`Extracted check name from check run id: ${checkName}`);
+        }
+        else {
+            let workflow = await getFile(owner, repo, path, ref);
+            checkName = workflow.jobs[jobName].name || jobName;
+            core.debug(`Extracted check name from workflow file: ${checkName}`);
+        }
         return checkName;
     }
     catch (error) {
@@ -33264,6 +33297,7 @@ function inputsParser() {
     const retries = (0, validators_1.validateIntervalValues)(parseInt(core.getInput("retries")));
     const verbose = core.getInput("verbose") == "true";
     const showJobSummary = core.getInput("show_job_summary") == "true";
+    const checkRunId = parseInt(core.getInput("check_run_id")) || undefined;
     return {
         commitSHA,
         checksInclude,
@@ -33278,7 +33312,8 @@ function inputsParser() {
         failStep,
         failOnMissingChecks,
         verbose,
-        showJobSummary
+        showJobSummary,
+        checkRunId,
     };
 }
 function parseChecksArray(input, inputType = "checks_include") {
@@ -33297,12 +33332,12 @@ function parseChecksArray(input, inputType = "checks_include") {
         }
         else {
             // Split by commas.
-            checks = trimmedInput.split(',').map(element => {
+            checks = trimmedInput.split(",").map((element) => {
                 return { name: element.trim(), app_id: -1 };
             });
         }
         // Remove checks with no filtering ability
-        checks = checks.filter((c) => c.app_id !== -1 || c.name !== '');
+        checks = checks.filter((c) => c.app_id !== -1 || c.name !== "");
         if (!validateCheckInputs(checks)) {
             throw new Error();
         }
@@ -33313,7 +33348,7 @@ function parseChecksArray(input, inputType = "checks_include") {
     }
 }
 function isValidCheckInput(object) {
-    return typeof object.name === 'string' && typeof object.app_id === 'number';
+    return typeof object.name === "string" && typeof object.app_id === "number";
 }
 function validateCheckInputs(array) {
     return array.every(isValidCheckInput);
@@ -35369,8 +35404,8 @@ function composeCollection(CN, ctx, token, props, onError) {
             tag = kt;
         }
         else {
-            if (kt?.collection) {
-                onError(tagToken, 'BAD_COLLECTION_TYPE', `${kt.tag} used for ${expType} collection, but expects ${kt.collection}`, true);
+            if (kt) {
+                onError(tagToken, 'BAD_COLLECTION_TYPE', `${kt.tag} used for ${expType} collection, but expects ${kt.collection ?? 'scalar'}`, true);
             }
             else {
                 onError(tagToken, 'TAG_RESOLVE_FAILED', `Unresolved tag: ${tagName}`, true);
@@ -40835,7 +40870,20 @@ class Parser {
                 default: {
                     const bv = this.startBlockValue(map);
                     if (bv) {
-                        if (atMapIndent && bv.type !== 'block-seq') {
+                        if (bv.type === 'block-seq') {
+                            if (!it.explicitKey &&
+                                it.sep &&
+                                !includesToken(it.sep, 'newline')) {
+                                yield* this.pop({
+                                    type: 'error',
+                                    offset: this.offset,
+                                    message: 'Unexpected block-seq-ind on same line with key',
+                                    source: this.source
+                                });
+                                return;
+                            }
+                        }
+                        else if (atMapIndent) {
                             map.items.push({ start });
                         }
                         this.stack.push(bv);
@@ -41774,6 +41822,8 @@ const binary = {
         }
     },
     stringify({ comment, type, value }, ctx, onComment, onChompKeep) {
+        if (!value)
+            return '';
         const buf = value; // checked earlier by binary.identify()
         let str;
         if (typeof node_buffer.Buffer === 'function') {
@@ -42497,7 +42547,7 @@ const timestamp = {
         }
         return new Date(date);
     },
-    stringify: ({ value }) => value.toISOString().replace(/(T00:00:00)?\.000Z$/, '')
+    stringify: ({ value }) => value?.toISOString().replace(/(T00:00:00)?\.000Z$/, '') ?? ''
 };
 
 exports.floatTime = floatTime;
