@@ -32813,6 +32813,7 @@ class Checks {
             checksConstants_1.checkStatus.IN_PROGRESS,
             checksConstants_1.checkStatus.QUEUED,
             checksConstants_1.checkStatus.WAITING,
+            checksConstants_1.checkStatus.PENDING,
         ];
         let anyInProgressQueuedWaiting = checks.filter((check) => inProgressQueuedWaiting.includes(check.status));
         if (anyInProgressQueuedWaiting.length > 0) {
@@ -33011,6 +33012,7 @@ exports.checkStatus = {
     IN_PROGRESS: "in_progress",
     COMPLETED: "completed",
     WAITING: "waiting",
+    PENDING: "pending",
 };
 exports.GitHubActionsBotSlug = "github-actions";
 
@@ -33500,7 +33502,7 @@ const validators_1 = __nccwpck_require__(3886);
 const checksFilters_1 = __nccwpck_require__(6421);
 function inputsParser() {
     const eventName = github.context.eventName;
-    const validPullRequestEvents = ["pull_request", "pull_request_target"];
+    const validPullRequestEvents = ["pull_request", "pull_request_target", "pull_request_review"];
     let headSha = undefined;
     if (validPullRequestEvents.includes(eventName)) {
         headSha = github.context.payload.pull_request?.head.sha;
