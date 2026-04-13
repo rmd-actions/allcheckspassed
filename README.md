@@ -235,7 +235,9 @@ a long time.
 jobs:
   allchecks:
     runs-on: ubuntu-latest
-    environment: delayenv
+    environment: 
+       name: delayenv
+       deployment: false
     steps:
       - uses: wechuli/allcheckspassed@v2
         with:
@@ -247,10 +249,6 @@ jobs:
 Unfortunately, this feature is only available on private/internal repositories for Enterprise plans. All public
 repositories
 have access to this feature.
-
-A downside of using environments is that it creates deployments which will show up on your pull request's timeline,
-these
-can sometimes be confusing, there is no way to prevent that.
 
 ## Setup with repository rulesets/branch protection rules
 
