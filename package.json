@@ -1,7 +1,7 @@
 {
   "name": "allcheckspassed",
   "description": "GitHub Action to wait and confirm that all checks reported on a commit have passed",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "author": "wechuli",
   "private": false,
   "homepage": "https://github.com/wechuli/allcheckspassed",
@@ -66,7 +66,7 @@
     "@actions/core": "^1.11.1",
     "@actions/github": "^6.0.0",
     "@octokit/rest": "^20.1.1",
-    "yaml": "^2.7.1"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
