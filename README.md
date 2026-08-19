@@ -296,6 +296,24 @@ You want to require the check that is created to always pass in your repository 
 Where possible prefer to configure repository rulesets
 to branch protection rules as they are more flexible.
 
+## Updating the Action bundle
+
+Changes to `src/` must include the corresponding generated `dist/` changes. Use the project's pinned Node.js version
+and regenerate the bundle with:
+
+```bash
+npm ci
+rm -rf dist/
+npm run build
+npm run package
+git diff -- dist/
+git status --short -- dist/
+git add --all -- dist/
+```
+
+Commit the updated `dist/` files with your source changes. CI rebuilds the Action and verifies that the committed bundle
+is current.
+
 ## Limitations
 
 Ultimately this is a temporary workaround for a missing feature, ensure all checks that run pass. GitHub may implement
