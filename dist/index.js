@@ -31718,6 +31718,27 @@ function getMostRecentStatusPerContextAndCreator(statuses) {
 }
 
 // src/checks/checks.ts
+function escapeHtml(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function formatCheckIdForSummary(check, linkUrl) {
+  const checkId = check.id.toString();
+  if (!linkUrl) {
+    return checkId;
+  }
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(linkUrl);
+  } catch {
+    return checkId;
+  }
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    return checkId;
+  }
+  return {
+    data: `<a href="${escapeHtml(parsedUrl.toString())}" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">${escapeHtml(checkId)}</a>`
+  };
+}
 var Checks = class {
   // data
   allChecks = [];
@@ -31947,7 +31968,8 @@ var Checks = class {
         data: "app.name",
         header: true
       },
-      { data: "app.id", header: true }
+      { data: "app.id", header: true },
+      { data: "check.id", header: true }
     ];
     let commitStatusesSummaryHeader = [
       { data: "context", header: true },
@@ -31955,7 +31977,8 @@ var Checks = class {
       { data: "created_at", header: true },
       { data: "updated_at", header: true },
       { data: "creator.login", header: true },
-      { data: "creator.id", header: true }
+      { data: "creator.id", header: true },
+      { data: "check.id", header: true }
     ];
     let checksOnly = filteredChecksExcludingOwnCheck.filter(
       (check) => check.commit_status === void 0
@@ -31971,7 +31994,8 @@ var Checks = class {
         check.started_at,
         check.completed_at ? check.completed_at : " ",
         check.app.name,
-        check.app.id.toString()
+        check.app.id.toString(),
+        formatCheckIdForSummary(check, check.details_url)
       ];
     });
     let commitStatusesSummary = commitStatusesOnly.map((check) => {
@@ -31981,7 +32005,8 @@ var Checks = class {
         check.commit_status?.created_at,
         check.commit_status?.updated_at,
         check.commit_status?.creator.login,
-        check.commit_status?.creator.id.toString()
+        check.commit_status?.creator.id.toString(),
+        formatCheckIdForSummary(check, check.commit_status?.target_url)
       ];
     });
     if (this.showJobSummary) {
