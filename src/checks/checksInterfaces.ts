@@ -1,8 +1,9 @@
-import { IStatus } from "src/statuses/statusesInterfaces";
+import { IStatus } from "../statuses/statusesInterfaces";
 
 export interface ICheck {
   id: number;
   name: string;
+  details_url?: string;
   status: string;
   conclusion: string | null;
   started_at: string;
