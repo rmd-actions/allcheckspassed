@@ -7,8 +7,9 @@ This action will check that all checks have passed on a given pull request.
 ### What's Changed
 
 - Upgrade to Node24 runtime
-- On GitHub.com, the name of the check run created by the workflow itself is extracted from the available `job.check_run_id` context, using this action as a reusable is now supported. This functionality is not yet available on GitHub Enterprise Server (GHES), will likely be available on the next release version - 3.18. On GitHub Enterprise Server, the action will attempt to extract its check name from the workflow file.
-- Support for [commit statuses](https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#about-commit-statuses) is now implemented on V2. To prevent a breaking change, this is disabled by default. You can enable it by setting the `include_commit_statuses` input to `true`.
+- On GitHub.com, the action can identify its own check via the `job.check_run_id` context and does not require `contents: read`.
+- On GitHub Enterprise Server (GHES), `job.check_run_id` may not be available depending on server version. In that case, the action falls back to reading the workflow file and requires `contents: read`.
+- Support for [commit statuses](https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#about-commit-statuses) is implemented in V2 and is disabled by default for backwards compatibility. Enable it with `include_status_commits: true`.
 
 ## Basic usage
 
@@ -25,7 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: read
-      contents: read
     steps:
       - uses: wechuli/allcheckspassed@v2
 ```
@@ -35,7 +35,8 @@ any of the checks are still in progress, pending or queued when the workflow is 
 
 The action also created a checks summary with details of each check that was evaluated and their status:
 
-![Screenshot 2024-02-06 at 15 37 43](https://github.com/wechuli/allcheckspassed/assets/15605874/de9a3a20-02ff-4d96-8da5-0c8300d429e7)
+<img width="1542" height="480" alt="allcheckspassed2" src="https://github.com/user-attachments/assets/0f68894c-f590-43ee-93dd-5f6d9ea0f539" />
+
 
 ## How it works
 
@@ -46,7 +47,7 @@ It will create a job summary of each check along with the details.
 
 ## Permissions
 
-The workflow job must be granted read access to `checks` and `contents` for it to work:
+Minimum required permissions on GitHub.com:
 
 ```yaml
 jobs:
@@ -54,10 +55,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: read
-      contents: read
 ```
 
-If you additionally want the action to check for commit statues on top of checks, you'll need to add the `statuses` permission:
+If you run on GHES and `job.check_run_id` is unavailable, add `contents: read` so the action can fall back to reading the workflow file and extract its own check name.
+
+If you additionally want the action to check commit statuses on top of checks, add `statuses: read`:
 
 ```yaml
 jobs:
@@ -65,7 +67,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: read
-      contents: read
       statuses: read
 ```
 
@@ -77,7 +78,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: read
-      contents: read
       actions: read
 ```
 
@@ -215,18 +215,18 @@ steps:
       show_job_summary: false
 ```
 
-### Status Commits
+### Commit statuses
 
-You can choose to include commit statuses in addition to checks for evaluation. By default, this is disabled. If your CI/CD is only ever running on GitHub Actions and you are not explicitly calling the commit status API, then that option can be left to default to false as is. If you have an external integration (such as Jenkins) that is reporting commit statuses instead of checks, you can set the `include_commit_statuses` option to `true` so that those are evaluated as well.
+You can choose to include commit statuses in addition to checks for evaluation. By default, this is disabled. If your CI/CD is only running on GitHub Actions and you are not explicitly calling the commit status API, you can keep the default. If you have an external integration (such as Jenkins) reporting commit statuses instead of checks, set `include_status_commits` to `true`.
 
 ```yaml
 steps:
   - uses: wechuli/allcheckspassed@v2
     with:
-      include_commit_statuses: true
+      include_status_commits: true
 ```
 
-Checks and status commits use a different API and there are some nuances to be aware of. More on this is documented at [./docs/adrs/commit_status.md](./docs/adrs/commit_status.md)
+Checks and commit statuses use different APIs and there are important nuances to be aware of. More on this is documented at [./docs/adrs/commit_status.md](./docs/adrs/commit_status.md)
 
 ### Ignore superseded workflow runs
 
@@ -249,13 +249,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: read
-      contents: read
       actions: read
     steps:
       - uses: wechuli/allcheckspassed@v2
         with:
           ignore_superseded_runs: true
 ```
+
+If you run this mode on GHES and `job.check_run_id` is unavailable, add `contents: read` as well.
 
 This mode and the default raw-checks mode behave differently in some edge cases (notably around manually-created check runs that live in cancelled check suites). The two modes, what each one does, and guidance on when to use which are documented in [./docs/adrs/evaluation_modes.md](./docs/adrs/evaluation_modes.md).
 
@@ -295,6 +296,28 @@ have access to this feature.
 You want to require the check that is created to always pass in your repository rulesets or branch protection rules.
 Where possible prefer to configure repository rulesets
 to branch protection rules as they are more flexible.
+
+## Contributing
+
+Contributions are welcome. For local setup, validation expectations, and release workflow, see [./Contributing.md](./Contributing.md).
+
+## Updating the Action bundle
+
+Changes to `src/` must include the corresponding generated `dist/` changes. Use the project's pinned Node.js version
+and regenerate the bundle with:
+
+```bash
+npm ci
+rm -rf dist/
+npm run build
+npm run package
+git diff -- dist/
+git status --short -- dist/
+git add --all -- dist/
+```
+
+Commit the updated `dist/` files with your source changes. CI rebuilds the Action and verifies that the committed bundle
+is current.
 
 ## Limitations
 
