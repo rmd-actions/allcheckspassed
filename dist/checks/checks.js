@@ -44,6 +44,33 @@ const checkNameExtractor_1 = require("../utils/checkNameExtractor");
 const checksConstants_1 = require("./checksConstants");
 const checkEmoji_1 = require("./checkEmoji");
 const statusesFilters_1 = require("../statuses/statusesFilters");
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+function formatCheckIdForSummary(check, linkUrl) {
+    const checkId = check.id.toString();
+    if (!linkUrl) {
+        return checkId;
+    }
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(linkUrl);
+    }
+    catch {
+        return checkId;
+    }
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        return checkId;
+    }
+    return {
+        data: `<a href="${escapeHtml(parsedUrl.toString())}" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">${escapeHtml(checkId)}</a>`,
+    };
+}
 class Checks {
     // data
     allChecks = [];
@@ -116,7 +143,8 @@ class Checks {
         // let's get the check from the workflow run itself, if the value already exists, don't re-fetch it
         if (!this.ownCheck) {
             let ownCheckName = await (0, checkNameExtractor_1.extractOwnCheckNameFromWorkflow)();
-            this.ownCheck = this.allChecks.find((check) => check.name === ownCheckName && check.app.slug === checksConstants_1.GitHubActionsBotSlug);
+            this.ownCheck = this.allChecks.find((check) => check.name === ownCheckName &&
+                check.app.slug === checksConstants_1.GitHubActionsBotSlug);
             if (!this.ownCheck) {
                 core.warning(`Could not determine own allcheckspassed check (expected name: ${JSON.stringify(ownCheckName)}, this may cause an indefinite loop)`);
             }
@@ -247,6 +275,7 @@ class Checks {
                 header: true,
             },
             { data: "app.id", header: true },
+            { data: "check.id", header: true },
         ];
         let commitStatusesSummaryHeader = [
             { data: "context", header: true },
@@ -255,6 +284,7 @@ class Checks {
             { data: "updated_at", header: true },
             { data: "creator.login", header: true },
             { data: "creator.id", header: true },
+            { data: "check.id", header: true },
         ];
         // pull out checks and commits statuses separately in the summary, for checks the commit_status is undefined, for commit statuses the commit_status is defined
         let checksOnly = filteredChecksExcludingOwnCheck.filter((check) => check.commit_status === undefined);
@@ -268,6 +298,7 @@ class Checks {
                 check.completed_at ? check.completed_at : " ",
                 check.app.name,
                 check.app.id.toString(),
+                formatCheckIdForSummary(check, check.details_url),
             ];
         });
         let commitStatusesSummary = commitStatusesOnly.map((check) => {
@@ -278,6 +309,7 @@ class Checks {
                 check.commit_status?.updated_at,
                 check.commit_status?.creator.login,
                 check.commit_status?.creator.id.toString(),
+                formatCheckIdForSummary(check, check.commit_status?.target_url),
             ];
         });
         if (this.showJobSummary) {
